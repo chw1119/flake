@@ -821,22 +821,39 @@ function insertCodeBlock(initialCode = '') {
         <button class="code-block-btn delete" title="삭제">✕</button>
       </div>
     </div>
-    <textarea class="code-block-editor" spellcheck="false" placeholder="# Python 코드를 입력하세요...">${initialCode}</textarea>
+    <div class="code-block-body">
+      <div class="code-block-highlight"></div>
+      <textarea class="code-block-editor" spellcheck="false" placeholder="# Python 코드를 입력하세요...">${escapeHtml(initialCode)}</textarea>
+    </div>
     <div class="code-block-output"></div>
   `;
 
   const textarea = block.querySelector('.code-block-editor');
+  const highlightEl = block.querySelector('.code-block-highlight');
   const playBtn = block.querySelector('.play');
   const stopBtn = block.querySelector('.stop');
   const deleteBtn = block.querySelector('.delete');
   const output = block.querySelector('.code-block-output');
 
+  // Sync highlight on input
+  function syncHighlight() {
+    highlightEl.innerHTML = highlightPython(textarea.value) + '\n';
+  }
+
   // Auto-resize textarea
   textarea.addEventListener('input', () => {
     textarea.style.height = 'auto';
     textarea.style.height = textarea.scrollHeight + 'px';
+    syncHighlight();
     saveCurrentMemo();
   });
+
+  textarea.addEventListener('scroll', () => {
+    highlightEl.scrollTop = textarea.scrollTop;
+  });
+
+  // Initial highlight
+  setTimeout(syncHighlight, 10);
 
   // Tab key support
   textarea.addEventListener('keydown', (e) => {
@@ -954,6 +971,7 @@ function reattachCodeBlocks() {
     block.dataset.blockId = blockId;
 
     const textarea = block.querySelector('.code-block-editor');
+    let highlightEl = block.querySelector('.code-block-highlight');
     const playBtn = block.querySelector('.play');
     const stopBtn = block.querySelector('.stop');
     const deleteBtn = block.querySelector('.delete');
@@ -961,11 +979,33 @@ function reattachCodeBlocks() {
 
     if (!textarea || !playBtn) return;
 
+    // Ensure highlight layer exists (for memos saved before this feature)
+    if (!highlightEl) {
+      const body = document.createElement('div');
+      body.className = 'code-block-body';
+      highlightEl = document.createElement('div');
+      highlightEl.className = 'code-block-highlight';
+      textarea.parentNode.insertBefore(body, textarea);
+      body.appendChild(highlightEl);
+      body.appendChild(textarea);
+    }
+
+    function syncHighlight() {
+      highlightEl.innerHTML = highlightPython(textarea.value) + '\n';
+    }
+
     textarea.addEventListener('input', () => {
       textarea.style.height = 'auto';
       textarea.style.height = textarea.scrollHeight + 'px';
+      syncHighlight();
       saveCurrentMemo();
     });
+
+    textarea.addEventListener('scroll', () => {
+      highlightEl.scrollTop = textarea.scrollTop;
+    });
+
+    setTimeout(syncHighlight, 10);
 
     textarea.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') {
@@ -1001,4 +1041,71 @@ function reattachCodeBlocks() {
       textarea.style.height = textarea.scrollHeight + 'px';
     }, 50);
   });
+}
+
+// ===== Python Syntax Highlighting =====
+function highlightPython(code) {
+  // Escape HTML first
+  let html = code
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Order matters: strings/comments first (greedy), then keywords etc.
+  const rules = [
+    // Triple-quoted strings
+    [/("""[\s\S]*?"""|'''[\s\S]*?''')/g, '<span class="hl-string">$1</span>'],
+    // Single/double quoted strings
+    [/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, '<span class="hl-string">$1</span>'],
+    // Comments
+    [/(#.*)/gm, '<span class="hl-comment">$1</span>'],
+    // Decorators
+    [/(@\w+)/g, '<span class="hl-decorator">$1</span>'],
+    // Keywords
+    [/\b(and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b/g,
+      '<span class="hl-keyword">$1</span>'],
+    // Booleans & None
+    [/\b(True|False)\b/g, '<span class="hl-bool">$1</span>'],
+    [/\b(None)\b/g, '<span class="hl-none">$1</span>'],
+    // self
+    [/\b(self|cls)\b/g, '<span class="hl-self">$1</span>'],
+    // Builtins
+    [/\b(print|len|range|int|str|float|list|dict|set|tuple|type|isinstance|hasattr|getattr|setattr|open|input|map|filter|zip|enumerate|sorted|reversed|sum|min|max|abs|round|any|all|super|property|staticmethod|classmethod|Exception|ValueError|TypeError|KeyError|IndexError|FileNotFoundError|RuntimeError)\b/g,
+      '<span class="hl-builtin">$1</span>'],
+    // Function calls (word followed by parenthesis)
+    [/\b([a-zA-Z_]\w*)\s*(?=\()/g, '<span class="hl-function">$1</span>'],
+    // Numbers
+    [/\b(\d+\.?\d*(?:e[+-]?\d+)?|0x[\da-fA-F]+|0b[01]+|0o[0-7]+)\b/g, '<span class="hl-number">$1</span>'],
+  ];
+
+  // Apply rules sequentially, but protect already-highlighted spans
+  // Simple approach: apply regex with a placeholder system
+  const placeholders = [];
+
+  function protect(match) {
+    const idx = placeholders.length;
+    placeholders.push(match);
+    return `\x00PH${idx}\x00`;
+  }
+
+  // First pass: strings and comments (protect them)
+  html = html.replace(/("""[\s\S]*?"""|'''[\s\S]*?''')/g, (m) => protect(`<span class="hl-string">${m}</span>`));
+  html = html.replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, (m) => protect(`<span class="hl-string">${m}</span>`));
+  html = html.replace(/(#.*)/gm, (m) => protect(`<span class="hl-comment">${m}</span>`));
+
+  // Second pass: everything else
+  html = html.replace(/(@\w+)/g, '<span class="hl-decorator">$1</span>');
+  html = html.replace(/\b(and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b/g,
+    '<span class="hl-keyword">$1</span>');
+  html = html.replace(/\b(True|False)\b/g, '<span class="hl-bool">$1</span>');
+  html = html.replace(/\b(None)\b/g, '<span class="hl-none">$1</span>');
+  html = html.replace(/\b(self|cls)\b/g, '<span class="hl-self">$1</span>');
+  html = html.replace(/\b(print|len|range|int|str|float|list|dict|set|tuple|type|isinstance|hasattr|getattr|setattr|open|input|map|filter|zip|enumerate|sorted|reversed|sum|min|max|abs|round|any|all|super|property|staticmethod|classmethod|Exception|ValueError|TypeError|KeyError|IndexError|FileNotFoundError|RuntimeError)\b/g,
+    '<span class="hl-builtin">$1</span>');
+  html = html.replace(/\b(\d+\.?\d*(?:e[+-]?\d+)?|0x[\da-fA-F]+|0b[01]+|0o[0-7]+)\b/g, '<span class="hl-number">$1</span>');
+
+  // Restore placeholders
+  html = html.replace(/\x00PH(\d+)\x00/g, (_, idx) => placeholders[parseInt(idx)]);
+
+  return html;
 }

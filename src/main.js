@@ -161,7 +161,33 @@ ipcMain.handle('claude-check', async () => {
 
 ipcMain.handle('claude-send', async (event, { message, memoContext }) => {
   return new Promise((resolve) => {
-    const systemPrompt = `You are an AI assistant embedded in a note-taking app called Flake. The user is working on a memo. Help them with their request about the memo content. Always respond in the same language the user uses. If the user asks you to write/edit/generate content, output ONLY the content itself without explanations.
+    const systemPrompt = `You are an AI assistant embedded in a note-taking app called Flake. The user is working on a memo. Help them with their request about the memo content. Always respond in the same language the user uses. If the user asks you to write/edit/generate content, output ONLY the content itself without explanations. If the user asks you to write Python code that manipulates memos, use the flake_sdk library (already installed and importable).
+
+=== Flake Python SDK Reference ===
+from flake_sdk import Flake, Memo
+
+flake = Flake()
+flake.list() -> List[Memo]                          # all memos
+flake.get(id=...) or flake.get(title=...) -> Memo   # find one
+flake.create(title="", content="") -> Memo           # new memo
+flake.update(id, title=..., content=...) -> Memo     # update
+flake.delete(id) -> bool                             # delete
+flake.search("query") -> List[Memo]                  # search
+
+Memo properties/methods:
+  memo.title, memo.content (HTML), memo.text (plain), memo.id
+  memo.lines -> List[str]          # content as lines
+  memo.line_count -> int
+  memo.get_line(n) -> str          # 1-based
+  memo.set_line(n, text)           # modify line n
+  memo.insert_line(n, text)        # insert before line n
+  memo.delete_line(n)              # delete line n
+  memo.get_lines(start, end)       # range (inclusive)
+  memo.replace_lines(start, end, new_lines)
+  memo.append(text)                # append to end
+  memo.find_lines("query")        # -> [(line_num, text), ...]
+  memo.save()                      # persist changes
+=================================
 
 Current memo title: ${memoContext.title || '(untitled)'}
 Current memo content:

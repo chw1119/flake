@@ -774,12 +774,38 @@ body {
   background: rgba(255, 71, 87, 0.15);
 }
 
-.code-block-editor {
-  width: 100%;
-  min-height: 60px;
+.code-block-body {
+  position: relative;
+  overflow: hidden;
+}
+
+.code-block-highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   padding: 12px 16px;
   background: #0d1117;
   color: #e6edf3;
+  font-family: 'Courier New', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  tab-size: 4;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.code-block-editor {
+  position: relative;
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 16px;
+  background: transparent;
+  color: transparent;
+  caret-color: #e6edf3;
   border: none;
   font-family: 'Courier New', 'Fira Code', monospace;
   font-size: 13px;
@@ -787,11 +813,22 @@ body {
   resize: vertical;
   outline: none;
   tab-size: 4;
+  z-index: 1;
 }
 
-.code-block-editor:focus {
-  background: #0d1117;
-}
+/* Syntax highlight tokens */
+.hl-keyword { color: #ff7b72; font-weight: 600; }
+.hl-builtin { color: #d2a8ff; }
+.hl-string { color: #a5d6ff; }
+.hl-number { color: #79c0ff; }
+.hl-comment { color: #8b949e; font-style: italic; }
+.hl-function { color: #d2a8ff; }
+.hl-decorator { color: #ffa657; }
+.hl-operator { color: #ff7b72; }
+.hl-class { color: #7ee787; font-weight: 600; }
+.hl-self { color: #ff7b72; font-style: italic; }
+.hl-bool { color: #79c0ff; font-weight: 600; }
+.hl-none { color: #79c0ff; font-style: italic; }
 
 .code-block-output {
   border-top: 1px solid var(--border);
