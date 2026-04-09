@@ -369,17 +369,41 @@ window.api.onNewMemo(() => {
 
 // Reload when data.json is changed externally (e.g. by Python SDK)
 window.api.onDataFileChanged(async () => {
-  const prevId = currentMemoId;
-  await loadFromDisk();
-  // Try to stay on the same memo
-  const still = memos.find(m => m.id === prevId);
-  if (still) {
-    selectMemo(still.id);
-  } else if (memos.length > 0) {
+  const result = await window.api.loadMemos();
+  if (!result.success) return;
+  const newMemos = result.memos || [];
+
+  // Check if current memo was modified
+  const oldCurrent = memos.find(m => m.id === currentMemoId);
+  const newCurrent = newMemos.find(m => m.id === currentMemoId);
+
+  // Update in-memory data
+  memos = newMemos;
+
+  // Only re-render sidebar (lightweight)
+  renderMemoList();
+
+  // Only touch the editor if the current memo actually changed
+  if (oldCurrent && newCurrent) {
+    const contentChanged = oldCurrent.content !== newCurrent.content;
+    const titleChanged = oldCurrent.title !== newCurrent.title;
+    const codeChanged = JSON.stringify(oldCurrent.codeBlocks || []) !== JSON.stringify(newCurrent.codeBlocks || []);
+
+    if (titleChanged) {
+      titleInput.value = newCurrent.title;
+    }
+    if (contentChanged) {
+      editor.innerHTML = newCurrent.content;
+      wrapExistingImages();
+      updateCharCount();
+    }
+    if (codeChanged) {
+      renderCodeBlocks(newCurrent.codeBlocks || []);
+    }
+  } else if (!newCurrent && memos.length > 0) {
+    // Current memo was deleted externally
     selectMemo(memos[0].id);
   }
-  renderMemoList();
-  showToast('외부에서 메모가 변경되어 새로고침했습니다', 'info');
 });
 
 // ===== Disk Storage (~/.flake/data.json) =====
