@@ -77,26 +77,30 @@ function registerShortcuts() {
 }
 
 // Watch ~/.flake/data.json for external changes (e.g. Python SDK)
-let fileWatcher = null;
 let lastWriteTime = 0;
+let lastExternalMtime = 0;
 
 function watchDataFile() {
-  if (fileWatcher) return;
   // Ensure file exists before watching
   if (!fs.existsSync(DATA_FILE)) {
     fs.writeFileSync(DATA_FILE, '[]', 'utf-8');
   }
-  fileWatcher = fs.watch(DATA_FILE, { persistent: false }, (eventType) => {
-    if (eventType === 'change') {
-      // Ignore changes we made ourselves (within 500ms)
-      const now = Date.now();
-      if (now - lastWriteTime < 500) return;
-      // Notify renderer to reload
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('data-file-changed');
+  lastExternalMtime = fs.statSync(DATA_FILE).mtimeMs;
+
+  // Poll every 500ms — reliable for rapid external writes
+  setInterval(() => {
+    try {
+      const stat = fs.statSync(DATA_FILE);
+      if (stat.mtimeMs > lastExternalMtime) {
+        lastExternalMtime = stat.mtimeMs;
+        // Ignore our own writes
+        if (Date.now() - lastWriteTime < 400) return;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('data-file-changed');
+        }
       }
-    }
-  });
+    } catch (e) { /* file may be mid-write */ }
+  }, 500);
 }
 
 app.whenReady().then(() => {

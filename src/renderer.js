@@ -368,9 +368,17 @@ window.api.onNewMemo(() => {
 });
 
 // Reload when data.json is changed externally (e.g. by Python SDK)
+let isSyncing = false;
+
 window.api.onDataFileChanged(async () => {
+  if (isSyncing) return;
+  isSyncing = true;
+
+  // Cancel any pending auto-save to avoid overwriting external changes
+  clearTimeout(autoSaveTimer);
+
   const result = await window.api.loadMemos();
-  if (!result.success) return;
+  if (!result.success) { isSyncing = false; return; }
   const newMemos = result.memos || [];
 
   // Check if current memo was modified
@@ -380,30 +388,30 @@ window.api.onDataFileChanged(async () => {
   // Update in-memory data
   memos = newMemos;
 
-  // Only re-render sidebar (lightweight)
+  // Only re-render sidebar
   renderMemoList();
 
   // Only touch the editor if the current memo actually changed
   if (oldCurrent && newCurrent) {
-    const contentChanged = oldCurrent.content !== newCurrent.content;
-    const titleChanged = oldCurrent.title !== newCurrent.title;
-    const codeChanged = JSON.stringify(oldCurrent.codeBlocks || []) !== JSON.stringify(newCurrent.codeBlocks || []);
-
-    if (titleChanged) {
+    if (oldCurrent.title !== newCurrent.title) {
       titleInput.value = newCurrent.title;
     }
-    if (contentChanged) {
+    if (oldCurrent.content !== newCurrent.content) {
+      // Preserve cursor position if possible
+      const hadFocus = document.activeElement === editor;
       editor.innerHTML = newCurrent.content;
       wrapExistingImages();
       updateCharCount();
+      if (hadFocus) editor.focus();
     }
-    if (codeChanged) {
+    if (JSON.stringify(oldCurrent.codeBlocks || []) !== JSON.stringify(newCurrent.codeBlocks || [])) {
       renderCodeBlocks(newCurrent.codeBlocks || []);
     }
   } else if (!newCurrent && memos.length > 0) {
-    // Current memo was deleted externally
     selectMemo(memos[0].id);
   }
+
+  isSyncing = false;
 });
 
 // ===== Disk Storage (~/.flake/data.json) =====
