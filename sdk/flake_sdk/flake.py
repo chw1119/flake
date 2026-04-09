@@ -73,6 +73,7 @@ class Memo:
     createdAt: str
     updatedAt: str
     images: list = field(default_factory=list)
+    codeBlocks: list = field(default_factory=list)
 
     @property
     def text(self) -> str:
@@ -206,6 +207,7 @@ class Flake:
             createdAt=d.get('createdAt', ''),
             updatedAt=d.get('updatedAt', ''),
             images=d.get('images', []),
+            codeBlocks=d.get('codeBlocks', []),
         )
 
     def list(self) -> List[Memo]:
