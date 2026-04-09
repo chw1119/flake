@@ -35,8 +35,7 @@ function createNewMemo() {
     content: '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    images: [],
-    codeBlocks: []
+    images: []
   };
   memos.unshift(memo);
   selectMemo(memo.id);
@@ -54,7 +53,7 @@ function selectMemo(id) {
     titleInput.value = memo.title;
     editor.innerHTML = memo.content;
     wrapExistingImages();
-    renderCodeBlocks(memo.codeBlocks || []);
+    reattachCodeBlocks();
     updateStatus();
     updateCharCount();
   }
@@ -66,13 +65,16 @@ function saveCurrentMemo() {
   const memo = memos.find(m => m.id === currentMemoId);
   if (memo) {
     memo.title = titleInput.value;
+    // Sync code block textarea values into data-code attributes before saving
+    editor.querySelectorAll('.code-block').forEach(block => {
+      const ta = block.querySelector('.code-block-editor');
+      if (ta) block.setAttribute('data-code', ta.value);
+    });
     memo.content = editor.innerHTML;
     memo.updatedAt = new Date().toISOString();
     // Extract image data
     const imgs = editor.querySelectorAll('img');
     memo.images = Array.from(imgs).map(img => img.src);
-    // Collect code blocks from separate container
-    memo.codeBlocks = collectCodeBlocks();
   }
   saveToDisk();
 }
@@ -397,15 +399,12 @@ window.api.onDataFileChanged(async () => {
       titleInput.value = newCurrent.title;
     }
     if (oldCurrent.content !== newCurrent.content) {
-      // Preserve cursor position if possible
       const hadFocus = document.activeElement === editor;
       editor.innerHTML = newCurrent.content;
       wrapExistingImages();
+      reattachCodeBlocks();
       updateCharCount();
       if (hadFocus) editor.focus();
-    }
-    if (JSON.stringify(oldCurrent.codeBlocks || []) !== JSON.stringify(newCurrent.codeBlocks || [])) {
-      renderCodeBlocks(newCurrent.codeBlocks || []);
     }
   } else if (!newCurrent && memos.length > 0) {
     selectMemo(memos[0].id);
@@ -858,8 +857,7 @@ document.getElementById('btn-find-toggle-replace').addEventListener('click', () 
 document.getElementById('btn-replace-one').addEventListener('click', replaceOne);
 document.getElementById('btn-replace-all').addEventListener('click', replaceAll);
 
-// ===== Code Blocks (Jupyter-style, separated from editor) =====
-const codeBlocksContainer = document.getElementById('code-blocks-container');
+// ===== Code Blocks (inline in editor) =====
 let codeBlockCounter = 0;
 let insertDebounce = false;
 
@@ -870,14 +868,47 @@ function insertCodeBlock(initialCode = '') {
 
   codeBlockCounter++;
   const blockId = 'cb-' + Date.now() + '-' + codeBlockCounter;
-  createCodeBlockElement(blockId, initialCode, codeBlockCounter);
+
+  const block = buildCodeBlockDOM(blockId, initialCode, codeBlockCounter);
+
+  // Insert at cursor or at end of editor
+  const selection = window.getSelection();
+  if (selection.rangeCount > 0 && editor.contains(selection.anchorNode)) {
+    const range = selection.getRangeAt(0);
+    range.collapse(false);
+    // Ensure a line break before and after
+    const brBefore = document.createElement('br');
+    const brAfter = document.createElement('br');
+    range.insertNode(brAfter);
+    range.insertNode(block);
+    range.insertNode(brBefore);
+    // Move cursor after the block
+    range.setStartAfter(brAfter);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  } else {
+    editor.appendChild(document.createElement('br'));
+    editor.appendChild(block);
+    editor.appendChild(document.createElement('br'));
+  }
+
+  const textarea = block.querySelector('.code-block-editor');
+  setTimeout(() => {
+    textarea.style.height = textarea.scrollHeight + 'px';
+    textarea.focus();
+    block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 50);
+
   saveCurrentMemo();
 }
 
-function createCodeBlockElement(blockId, code, cellNum) {
+function buildCodeBlockDOM(blockId, code, cellNum) {
   const block = document.createElement('div');
   block.className = 'code-block';
-  block.dataset.blockId = blockId;
+  block.contentEditable = 'false';
+  block.setAttribute('data-block-id', blockId);
+  block.setAttribute('data-code', code);
 
   block.innerHTML = `
     <div class="code-block-header">
@@ -897,26 +928,20 @@ function createCodeBlockElement(blockId, code, cellNum) {
     <div class="code-block-output"></div>
   `;
 
-  codeBlocksContainer.appendChild(block);
   attachCodeBlockEvents(block);
-
-  // Focus & resize
-  const textarea = block.querySelector('.code-block-editor');
-  setTimeout(() => {
-    textarea.style.height = textarea.scrollHeight + 'px';
-    textarea.focus();
-    block.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, 50);
+  return block;
 }
 
 function attachCodeBlockEvents(block) {
-  const blockId = block.dataset.blockId;
+  const blockId = block.getAttribute('data-block-id');
   const textarea = block.querySelector('.code-block-editor');
   const highlightEl = block.querySelector('.code-block-highlight');
   const playBtn = block.querySelector('.play');
   const stopBtn = block.querySelector('.stop');
   const deleteBtn = block.querySelector('.delete');
   const output = block.querySelector('.code-block-output');
+
+  if (!textarea || !playBtn) return;
 
   function syncHighlight() {
     highlightEl.innerHTML = highlightPython(textarea.value) + '\n';
@@ -934,6 +959,7 @@ function attachCodeBlockEvents(block) {
   });
 
   textarea.addEventListener('keydown', (e) => {
+    e.stopPropagation(); // Don't let editor handle these
     if (e.key === 'Tab') {
       e.preventDefault();
       const start = textarea.selectionStart;
@@ -965,27 +991,48 @@ function attachCodeBlockEvents(block) {
     showToast('코드 블록이 삭제되었습니다', 'warning');
   });
 
-  setTimeout(syncHighlight, 10);
+  // Restore code from data-code attribute (after innerHTML load)
+  const savedCode = block.getAttribute('data-code');
+  if (savedCode && !textarea.value) {
+    textarea.value = savedCode;
+  }
+
+  setTimeout(() => {
+    syncHighlight();
+    textarea.style.height = textarea.scrollHeight + 'px';
+  }, 10);
 }
 
-// Collect code block data for saving
-function collectCodeBlocks() {
-  const blocks = codeBlocksContainer.querySelectorAll('.code-block');
-  return Array.from(blocks).map((block, i) => ({
-    id: block.dataset.blockId,
-    code: block.querySelector('.code-block-editor').value,
-    cellNum: i + 1,
-  }));
-}
-
-// Render code blocks from saved data
-function renderCodeBlocks(blockData) {
-  codeBlocksContainer.innerHTML = '';
+// Re-attach events on all code blocks after loading memo content
+function reattachCodeBlocks() {
   codeBlockCounter = 0;
-  if (!blockData || blockData.length === 0) return;
-  blockData.forEach((b) => {
+  editor.querySelectorAll('.code-block').forEach(block => {
     codeBlockCounter++;
-    createCodeBlockElement(b.id, b.code || '', b.cellNum || codeBlockCounter);
+    block.contentEditable = 'false';
+    // Rebuild inner HTML from saved data-code
+    const savedCode = block.getAttribute('data-code') || '';
+    const blockId = block.getAttribute('data-block-id') || 'cb-' + Date.now() + '-' + codeBlockCounter;
+    block.setAttribute('data-block-id', blockId);
+
+    block.innerHTML = `
+      <div class="code-block-header">
+        <span class="code-block-label">
+          <span class="cell-number">[${codeBlockCounter}]</span> Python
+        </span>
+        <div class="code-block-actions">
+          <button class="code-block-btn play" title="실행 (Ctrl+Enter)">▶</button>
+          <button class="code-block-btn stop" title="중단" style="display:none">■</button>
+          <button class="code-block-btn delete" title="삭제">✕</button>
+        </div>
+      </div>
+      <div class="code-block-body">
+        <div class="code-block-highlight"></div>
+        <textarea class="code-block-editor" spellcheck="false" placeholder="# Python 코드를 입력하세요...">${escapeHtml(savedCode)}</textarea>
+      </div>
+      <div class="code-block-output"></div>
+    `;
+
+    attachCodeBlockEvents(block);
   });
 }
 
@@ -1020,7 +1067,7 @@ async function runCodeBlock(blockId, code, outputEl, playBtn, stopBtn) {
 
 // Listen for script output streaming
 window.api.onScriptOutput(({ blockId, chunk, stream }) => {
-  const block = codeBlocksContainer.querySelector(`.code-block[data-block-id="${blockId}"]`);
+  const block = editor.querySelector(`.code-block[data-block-id="${blockId}"]`);
   if (!block) return;
   const output = block.querySelector('.code-block-output');
   output.style.display = 'block';
