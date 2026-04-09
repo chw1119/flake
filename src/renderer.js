@@ -35,7 +35,8 @@ function createNewMemo() {
     content: '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    images: []
+    images: [],
+    codeBlocks: []
   };
   memos.unshift(memo);
   selectMemo(memo.id);
@@ -53,7 +54,7 @@ function selectMemo(id) {
     titleInput.value = memo.title;
     editor.innerHTML = memo.content;
     wrapExistingImages();
-    reattachCodeBlocks();
+    renderCodeBlocks(memo.codeBlocks || []);
     updateStatus();
     updateCharCount();
   }
@@ -65,15 +66,13 @@ function saveCurrentMemo() {
   const memo = memos.find(m => m.id === currentMemoId);
   if (memo) {
     memo.title = titleInput.value;
-    // Sync textarea values into DOM before saving
-    editor.querySelectorAll('.code-block-editor').forEach(ta => {
-      ta.textContent = ta.value;
-    });
     memo.content = editor.innerHTML;
     memo.updatedAt = new Date().toISOString();
     // Extract image data
     const imgs = editor.querySelectorAll('img');
     memo.images = Array.from(imgs).map(img => img.src);
+    // Collect code blocks from separate container
+    memo.codeBlocks = collectCodeBlocks();
   }
   saveToDisk();
 }
@@ -802,22 +801,31 @@ document.getElementById('btn-find-toggle-replace').addEventListener('click', () 
 document.getElementById('btn-replace-one').addEventListener('click', replaceOne);
 document.getElementById('btn-replace-all').addEventListener('click', replaceAll);
 
-// ===== Code Blocks (Jupyter-style) =====
+// ===== Code Blocks (Jupyter-style, separated from editor) =====
+const codeBlocksContainer = document.getElementById('code-blocks-container');
 let codeBlockCounter = 0;
+let insertDebounce = false;
 
 function insertCodeBlock(initialCode = '') {
+  if (insertDebounce) return;
+  insertDebounce = true;
+  setTimeout(() => insertDebounce = false, 200);
+
   codeBlockCounter++;
   const blockId = 'cb-' + Date.now() + '-' + codeBlockCounter;
+  createCodeBlockElement(blockId, initialCode, codeBlockCounter);
+  saveCurrentMemo();
+}
 
+function createCodeBlockElement(blockId, code, cellNum) {
   const block = document.createElement('div');
   block.className = 'code-block';
-  block.contentEditable = 'false';
   block.dataset.blockId = blockId;
 
   block.innerHTML = `
     <div class="code-block-header">
       <span class="code-block-label">
-        <span class="cell-number">[${codeBlockCounter}]</span> Python
+        <span class="cell-number">[${cellNum}]</span> Python
       </span>
       <div class="code-block-actions">
         <button class="code-block-btn play" title="실행 (Ctrl+Enter)">▶</button>
@@ -827,11 +835,25 @@ function insertCodeBlock(initialCode = '') {
     </div>
     <div class="code-block-body">
       <div class="code-block-highlight"></div>
-      <textarea class="code-block-editor" spellcheck="false" placeholder="# Python 코드를 입력하세요...">${escapeHtml(initialCode)}</textarea>
+      <textarea class="code-block-editor" spellcheck="false" placeholder="# Python 코드를 입력하세요...">${escapeHtml(code)}</textarea>
     </div>
     <div class="code-block-output"></div>
   `;
 
+  codeBlocksContainer.appendChild(block);
+  attachCodeBlockEvents(block);
+
+  // Focus & resize
+  const textarea = block.querySelector('.code-block-editor');
+  setTimeout(() => {
+    textarea.style.height = textarea.scrollHeight + 'px';
+    textarea.focus();
+    block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 50);
+}
+
+function attachCodeBlockEvents(block) {
+  const blockId = block.dataset.blockId;
   const textarea = block.querySelector('.code-block-editor');
   const highlightEl = block.querySelector('.code-block-highlight');
   const playBtn = block.querySelector('.play');
@@ -839,12 +861,10 @@ function insertCodeBlock(initialCode = '') {
   const deleteBtn = block.querySelector('.delete');
   const output = block.querySelector('.code-block-output');
 
-  // Sync highlight on input
   function syncHighlight() {
     highlightEl.innerHTML = highlightPython(textarea.value) + '\n';
   }
 
-  // Auto-resize textarea
   textarea.addEventListener('input', () => {
     textarea.style.height = 'auto';
     textarea.style.height = textarea.scrollHeight + 'px';
@@ -856,10 +876,6 @@ function insertCodeBlock(initialCode = '') {
     highlightEl.scrollTop = textarea.scrollTop;
   });
 
-  // Initial highlight
-  setTimeout(syncHighlight, 10);
-
-  // Tab key support
   textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -867,20 +883,18 @@ function insertCodeBlock(initialCode = '') {
       const end = textarea.selectionEnd;
       textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
       textarea.selectionStart = textarea.selectionEnd = start + 4;
+      syncHighlight();
     }
-    // Ctrl+Enter to run
     if (e.ctrlKey && e.key === 'Enter') {
       e.preventDefault();
       runCodeBlock(blockId, textarea.value, output, playBtn, stopBtn);
     }
   });
 
-  // Play button
   playBtn.addEventListener('click', () => {
     runCodeBlock(blockId, textarea.value, output, playBtn, stopBtn);
   });
 
-  // Stop button
   stopBtn.addEventListener('click', async () => {
     await window.api.stopScript(blockId);
     playBtn.style.display = 'flex';
@@ -888,36 +902,34 @@ function insertCodeBlock(initialCode = '') {
     playBtn.classList.remove('running');
   });
 
-  // Delete button
   deleteBtn.addEventListener('click', () => {
     block.remove();
     saveCurrentMemo();
     showToast('코드 블록이 삭제되었습니다', 'warning');
   });
 
-  // Insert at cursor or end of editor
-  const selection = window.getSelection();
-  if (selection.rangeCount > 0 && editor.contains(selection.anchorNode)) {
-    const range = selection.getRangeAt(0);
-    range.deleteContents();
-    range.insertNode(block);
-    // Add a line break after for editing
-    const br = document.createElement('br');
-    block.after(br);
-    range.setStartAfter(br);
-    range.collapse(true);
-  } else {
-    editor.appendChild(block);
-    editor.appendChild(document.createElement('br'));
-  }
+  setTimeout(syncHighlight, 10);
+}
 
-  // Auto-resize initial
-  setTimeout(() => {
-    textarea.style.height = textarea.scrollHeight + 'px';
-    textarea.focus();
-  }, 50);
+// Collect code block data for saving
+function collectCodeBlocks() {
+  const blocks = codeBlocksContainer.querySelectorAll('.code-block');
+  return Array.from(blocks).map((block, i) => ({
+    id: block.dataset.blockId,
+    code: block.querySelector('.code-block-editor').value,
+    cellNum: i + 1,
+  }));
+}
 
-  saveCurrentMemo();
+// Render code blocks from saved data
+function renderCodeBlocks(blockData) {
+  codeBlocksContainer.innerHTML = '';
+  codeBlockCounter = 0;
+  if (!blockData || blockData.length === 0) return;
+  blockData.forEach((b) => {
+    codeBlockCounter++;
+    createCodeBlockElement(b.id, b.code || '', b.cellNum || codeBlockCounter);
+  });
 }
 
 async function runCodeBlock(blockId, code, outputEl, playBtn, stopBtn) {
@@ -929,16 +941,12 @@ async function runCodeBlock(blockId, code, outputEl, playBtn, stopBtn) {
   stopBtn.style.display = 'flex';
   playBtn.classList.add('running');
 
-  // Just run the user's code directly
-  const wrappedCode = code;
-
-  const result = await window.api.runScript(wrappedCode, blockId);
+  const result = await window.api.runScript(code, blockId);
 
   playBtn.style.display = 'flex';
   stopBtn.style.display = 'none';
   playBtn.classList.remove('running');
 
-  // Show exit status
   const exitEl = document.createElement('div');
   if (result.exitCode === 0) {
     exitEl.className = 'exit-info success';
@@ -955,7 +963,7 @@ async function runCodeBlock(blockId, code, outputEl, playBtn, stopBtn) {
 
 // Listen for script output streaming
 window.api.onScriptOutput(({ blockId, chunk, stream }) => {
-  const block = document.querySelector(`.code-block[data-block-id="${blockId}"]`);
+  const block = codeBlocksContainer.querySelector(`.code-block[data-block-id="${blockId}"]`);
   if (!block) return;
   const output = block.querySelector('.code-block-output');
   output.style.display = 'block';
@@ -965,87 +973,6 @@ window.api.onScriptOutput(({ blockId, chunk, stream }) => {
   output.appendChild(span);
   output.scrollTop = output.scrollHeight;
 });
-
-// Re-attach code block event listeners when loading a memo
-function reattachCodeBlocks() {
-  const blocks = editor.querySelectorAll('.code-block');
-  blocks.forEach(block => {
-    block.contentEditable = 'false';
-    const blockId = block.dataset.blockId || 'cb-' + Date.now() + '-' + (++codeBlockCounter);
-    block.dataset.blockId = blockId;
-
-    const textarea = block.querySelector('.code-block-editor');
-    let highlightEl = block.querySelector('.code-block-highlight');
-    const playBtn = block.querySelector('.play');
-    const stopBtn = block.querySelector('.stop');
-    const deleteBtn = block.querySelector('.delete');
-    const output = block.querySelector('.code-block-output');
-
-    if (!textarea || !playBtn) return;
-
-    // Ensure highlight layer exists (for memos saved before this feature)
-    if (!highlightEl) {
-      const body = document.createElement('div');
-      body.className = 'code-block-body';
-      highlightEl = document.createElement('div');
-      highlightEl.className = 'code-block-highlight';
-      textarea.parentNode.insertBefore(body, textarea);
-      body.appendChild(highlightEl);
-      body.appendChild(textarea);
-    }
-
-    function syncHighlight() {
-      highlightEl.innerHTML = highlightPython(textarea.value) + '\n';
-    }
-
-    textarea.addEventListener('input', () => {
-      textarea.style.height = 'auto';
-      textarea.style.height = textarea.scrollHeight + 'px';
-      syncHighlight();
-      saveCurrentMemo();
-    });
-
-    textarea.addEventListener('scroll', () => {
-      highlightEl.scrollTop = textarea.scrollTop;
-    });
-
-    setTimeout(syncHighlight, 10);
-
-    textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
-        textarea.selectionStart = textarea.selectionEnd = start + 4;
-      }
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault();
-        runCodeBlock(blockId, textarea.value, output, playBtn, stopBtn);
-      }
-    });
-
-    playBtn.addEventListener('click', () => {
-      runCodeBlock(blockId, textarea.value, output, playBtn, stopBtn);
-    });
-
-    stopBtn.addEventListener('click', async () => {
-      await window.api.stopScript(blockId);
-      playBtn.style.display = 'flex';
-      stopBtn.style.display = 'none';
-      playBtn.classList.remove('running');
-    });
-
-    deleteBtn.addEventListener('click', () => {
-      block.remove();
-      saveCurrentMemo();
-    });
-
-    setTimeout(() => {
-      textarea.style.height = textarea.scrollHeight + 'px';
-    }, 50);
-  });
-}
 
 // ===== Python Syntax Highlighting =====
 function highlightPython(code) {

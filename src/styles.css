@@ -527,16 +527,33 @@ body {
   outline: 2px solid var(--warning);
 }
 
+/* ===== Notebook Container ===== */
+.notebook-container {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.code-blocks-container {
+  padding: 0 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.code-blocks-container:empty {
+  display: none;
+}
+
 /* ===== Editor Content ===== */
 .editor-content {
-  flex: 1;
   padding: 20px 24px;
-  overflow-y: auto;
   line-height: 1.8;
   font-size: 15px;
   color: var(--text-primary);
   outline: none;
-  min-height: 200px;
+  min-height: 120px;
 }
 
 .editor-content:empty::before {
