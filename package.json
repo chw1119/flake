@@ -1,0 +1,16 @@
+{
+  "name": "memo-app",
+  "version": "1.0.0",
+  "description": "Modern memo application with image support",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "keywords": ["memo", "notes", "electron"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^41.2.0"
+  }
+}
