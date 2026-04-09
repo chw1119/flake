@@ -1,6 +1,15 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, dialog, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+
+const FLAKE_DIR = path.join(os.homedir(), '.flake');
+const DATA_FILE = path.join(FLAKE_DIR, 'data.json');
+
+// Ensure ~/.flake exists
+if (!fs.existsSync(FLAKE_DIR)) {
+  fs.mkdirSync(FLAKE_DIR, { recursive: true });
+}
 
 let mainWindow = null;
 let tray = null;
@@ -48,7 +57,7 @@ function createTray() {
     { label: '종료', click: () => { app.isQuitting = true; app.quit(); } }
   ]);
 
-  tray.setToolTip('Memo App');
+  tray.setToolTip('Flake');
   tray.setContextMenu(contextMenu);
   tray.on('click', () => mainWindow && mainWindow.show());
 }
@@ -90,35 +99,22 @@ app.on('activate', () => {
 
 // IPC Handlers
 
-ipcMain.handle('save-memo', async (event, { memo, filePath }) => {
+ipcMain.handle('save-memos', async (event, memos) => {
   try {
-    let savePath = filePath;
-    if (!savePath) {
-      const result = await dialog.showSaveDialog(mainWindow, {
-        title: '메모 저장',
-        defaultPath: path.join(app.getPath('documents'), `memo-${Date.now()}.json`),
-        filters: [{ name: 'JSON Files', extensions: ['json'] }]
-      });
-      if (result.canceled) return { success: false, canceled: true };
-      savePath = result.filePath;
-    }
-    fs.writeFileSync(savePath, JSON.stringify(memo, null, 2), 'utf-8');
-    return { success: true, filePath: savePath };
+    fs.writeFileSync(DATA_FILE, JSON.stringify(memos, null, 2), 'utf-8');
+    return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
   }
 });
 
-ipcMain.handle('load-memo', async () => {
+ipcMain.handle('load-memos', async () => {
   try {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      title: '메모 열기',
-      filters: [{ name: 'JSON Files', extensions: ['json'] }],
-      properties: ['openFile']
-    });
-    if (result.canceled) return { success: false, canceled: true };
-    const data = fs.readFileSync(result.filePaths[0], 'utf-8');
-    return { success: true, memo: JSON.parse(data), filePath: result.filePaths[0] };
+    if (!fs.existsSync(DATA_FILE)) {
+      return { success: true, memos: [] };
+    }
+    const data = fs.readFileSync(DATA_FILE, 'utf-8');
+    return { success: true, memos: JSON.parse(data) };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -129,7 +125,7 @@ ipcMain.handle('export-memo', async (event, { memo, format }) => {
     const ext = format === 'txt' ? 'txt' : 'json';
     const result = await dialog.showSaveDialog(mainWindow, {
       title: '메모 내보내기',
-      defaultPath: path.join(app.getPath('documents'), `memo-${Date.now()}.${ext}`),
+      defaultPath: path.join(app.getPath('documents'), `flake-${Date.now()}.${ext}`),
       filters: [{ name: `${ext.toUpperCase()} Files`, extensions: [ext] }]
     });
     if (result.canceled) return { success: false, canceled: true };

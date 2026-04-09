@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Memo App</title>
+  <title>Flake</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <!-- Custom Title Bar -->
   <div class="titlebar" id="titlebar">
     <div class="titlebar-drag">
-      <span class="titlebar-title">📝 Memo</span>
+      <span class="titlebar-title">❄️ Flake</span>
     </div>
     <div class="titlebar-controls">
       <button class="titlebar-btn minimize" id="btn-minimize" title="최소화">─</button>
@@ -38,22 +38,7 @@
         <!-- memo items rendered here -->
       </div>
       <div class="sidebar-footer">
-        <button class="btn-secondary" id="btn-load" title="파일에서 불러오기">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-          불러오기
-        </button>
-        <button class="btn-secondary" id="btn-save-file" title="파일로 저장">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
-          </svg>
-          저장
-        </button>
+        <span class="auto-save-label">자동 저장됨 — ~/.flake</span>
       </div>
     </aside>
 
@@ -95,11 +80,29 @@
               <polyline points="21 15 16 10 5 21"></polyline>
             </svg>
           </button>
+          <select id="font-family-select" class="toolbar-select" title="서체">
+            <option value="Segoe UI, sans-serif">Segoe UI</option>
+            <option value="Arial, sans-serif">Arial</option>
+            <option value="Georgia, serif">Georgia</option>
+            <option value="Times New Roman, serif">Times New Roman</option>
+            <option value="Courier New, monospace">Courier New</option>
+            <option value="Verdana, sans-serif">Verdana</option>
+            <option value="Trebuchet MS, sans-serif">Trebuchet MS</option>
+            <option value="Noto Sans KR, sans-serif">Noto Sans KR</option>
+          </select>
           <select id="font-size-select" class="toolbar-select" title="글자 크기">
-            <option value="1">작게</option>
-            <option value="3" selected>보통</option>
-            <option value="5">크게</option>
-            <option value="7">매우 크게</option>
+            <option value="10">10px</option>
+            <option value="12">12px</option>
+            <option value="14">14px</option>
+            <option value="16" selected>16px</option>
+            <option value="18">18px</option>
+            <option value="20">20px</option>
+            <option value="24">24px</option>
+            <option value="28">28px</option>
+            <option value="32">32px</option>
+            <option value="36">36px</option>
+            <option value="48">48px</option>
+            <option value="64">64px</option>
           </select>
         </div>
       </div>

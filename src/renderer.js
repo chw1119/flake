@@ -1,7 +1,7 @@
 // ===== State =====
 let memos = [];
 let currentMemoId = null;
-let currentFilePath = null;
+let autoSaveTimer = null;
 
 // ===== DOM Elements =====
 const editor = document.getElementById('editor');
@@ -13,8 +13,8 @@ const charCount = document.getElementById('char-count');
 const toastContainer = document.getElementById('toast-container');
 
 // ===== Initialization =====
-document.addEventListener('DOMContentLoaded', () => {
-  loadFromLocalStorage();
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadFromDisk();
   if (memos.length === 0) {
     createNewMemo();
   } else {
@@ -41,7 +41,7 @@ function createNewMemo() {
   selectMemo(memo.id);
   renderMemoList();
   titleInput.focus();
-  saveToLocalStorage();
+  saveToDisk();
   showToast('새 메모가 생성되었습니다', 'success');
 }
 
@@ -70,7 +70,7 @@ function saveCurrentMemo() {
     const imgs = editor.querySelectorAll('img');
     memo.images = Array.from(imgs).map(img => img.src);
   }
-  saveToLocalStorage();
+  saveToDisk();
 }
 
 function deleteMemo(id) {
@@ -87,7 +87,7 @@ function deleteMemo(id) {
     }
   }
   renderMemoList();
-  saveToLocalStorage();
+  saveToDisk();
   showToast('메모가 삭제되었습니다', 'warning');
 }
 
@@ -245,7 +245,27 @@ document.querySelectorAll('.toolbar-btn[data-command]').forEach(btn => {
 });
 
 document.getElementById('font-size-select').addEventListener('change', (e) => {
-  document.execCommand('fontSize', false, e.target.value);
+  const size = e.target.value + 'px';
+  const selection = window.getSelection();
+  if (selection.rangeCount > 0 && !selection.isCollapsed) {
+    // Wrap selected text with a span
+    const range = selection.getRangeAt(0);
+    const span = document.createElement('span');
+    span.style.fontSize = size;
+    range.surroundContents(span);
+  }
+  editor.focus();
+});
+
+document.getElementById('font-family-select').addEventListener('change', (e) => {
+  const font = e.target.value;
+  const selection = window.getSelection();
+  if (selection.rangeCount > 0 && !selection.isCollapsed) {
+    const range = selection.getRangeAt(0);
+    const span = document.createElement('span');
+    span.style.fontFamily = font;
+    range.surroundContents(span);
+  }
   editor.focus();
 });
 
@@ -287,53 +307,7 @@ searchInput.addEventListener('input', (e) => {
 
 document.getElementById('btn-new-memo').addEventListener('click', createNewMemo);
 
-// File operations
-document.getElementById('btn-save-file').addEventListener('click', async () => {
-  saveCurrentMemo();
-  const memo = memos.find(m => m.id === currentMemoId);
-  if (!memo) return;
-
-  const result = await window.api.saveMemo(memo, currentFilePath);
-  if (result.success) {
-    currentFilePath = result.filePath;
-    showToast('메모가 저장되었습니다', 'success');
-    updateStatus('저장됨');
-  } else if (!result.canceled) {
-    showToast('저장 실패: ' + result.error, 'error');
-  }
-});
-
-document.getElementById('btn-load').addEventListener('click', async () => {
-  const result = await window.api.loadMemo();
-  if (result.success) {
-    const loaded = result.memo;
-    // If loading a single memo object
-    if (loaded.id) {
-      const existing = memos.find(m => m.id === loaded.id);
-      if (existing) {
-        Object.assign(existing, loaded);
-      } else {
-        memos.unshift(loaded);
-      }
-      selectMemo(loaded.id);
-    }
-    // If loading an array of memos
-    else if (Array.isArray(loaded)) {
-      loaded.forEach(m => {
-        if (!memos.find(e => e.id === m.id)) {
-          memos.push(m);
-        }
-      });
-      if (loaded.length > 0) selectMemo(loaded[0].id);
-    }
-    currentFilePath = result.filePath;
-    renderMemoList();
-    saveToLocalStorage();
-    showToast('메모를 불러왔습니다', 'success');
-  } else if (!result.canceled) {
-    showToast('불러오기 실패: ' + result.error, 'error');
-  }
-});
+// File operations - auto save on changes (debounced)
 
 // Window controls
 document.getElementById('btn-minimize').addEventListener('click', () => window.api.minimize());
@@ -345,14 +319,6 @@ document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key === 'n') {
     e.preventDefault();
     createNewMemo();
-  }
-  if (e.ctrlKey && e.key === 's') {
-    e.preventDefault();
-    document.getElementById('btn-save-file').click();
-  }
-  if (e.ctrlKey && e.key === 'o') {
-    e.preventDefault();
-    document.getElementById('btn-load').click();
   }
   // Delete image with Delete/Backspace when selected
   if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -373,24 +339,23 @@ window.api.onNewMemo(() => {
   createNewMemo();
 });
 
-// ===== Local Storage =====
-function saveToLocalStorage() {
-  try {
-    localStorage.setItem('memos', JSON.stringify(memos));
-  } catch (e) {
-    // Storage full - trim old data
-    console.warn('LocalStorage save failed:', e);
-  }
+// ===== Disk Storage (~/.flake/data.json) =====
+function saveToDisk() {
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(async () => {
+    const result = await window.api.saveMemos(memos);
+    if (!result.success) {
+      console.warn('Save failed:', result.error);
+    }
+  }, 300);
 }
 
-function loadFromLocalStorage() {
-  try {
-    const data = localStorage.getItem('memos');
-    if (data) {
-      memos = JSON.parse(data);
-    }
-  } catch (e) {
-    console.warn('LocalStorage load failed:', e);
+async function loadFromDisk() {
+  const result = await window.api.loadMemos();
+  if (result.success) {
+    memos = result.memos || [];
+  } else {
+    console.warn('Load failed:', result.error);
     memos = [];
   }
 }

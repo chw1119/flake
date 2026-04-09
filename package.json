@@ -1,13 +1,13 @@
 {
-  "name": "memo-app",
+  "name": "flake",
   "version": "1.0.0",
-  "description": "Modern memo application with image support",
+  "description": "Flake - A modern note-taking app",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev"
   },
-  "keywords": ["memo", "notes", "electron"],
+  "keywords": ["flake", "notes", "electron"],
   "author": "",
   "license": "ISC",
   "devDependencies": {

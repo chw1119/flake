@@ -1,8 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
-  saveMemo: (memo, filePath) => ipcRenderer.invoke('save-memo', { memo, filePath }),
-  loadMemo: () => ipcRenderer.invoke('load-memo'),
+  saveMemos: (memos) => ipcRenderer.invoke('save-memos', memos),
+  loadMemos: () => ipcRenderer.invoke('load-memos'),
   exportMemo: (memo, format) => ipcRenderer.invoke('export-memo', { memo, format }),
 
   // Window controls
