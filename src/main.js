@@ -132,6 +132,8 @@ ipcMain.handle('save-memos', async (event, memos) => {
   try {
     lastWriteTime = Date.now();
     fs.writeFileSync(DATA_FILE, JSON.stringify(memos, null, 2), 'utf-8');
+    // Immediately update mtime so poller won't trigger for this write
+    try { lastExternalMtime = fs.statSync(DATA_FILE).mtimeMs; } catch(e) {}
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
