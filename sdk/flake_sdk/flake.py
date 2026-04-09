@@ -84,6 +84,84 @@ class Memo:
         """Set content as plain text (wraps in simple HTML)."""
         self.content = value.replace('\n', '<br>')
 
+    @property
+    def lines(self) -> List[str]:
+        """Get content as a list of lines."""
+        return _strip_html(self.content).split('\n')
+
+    @lines.setter
+    def lines(self, value: List[str]):
+        """Set content from a list of lines."""
+        self.content = '<br>'.join(value)
+
+    @property
+    def line_count(self) -> int:
+        """Get the number of lines."""
+        return len(self.lines)
+
+    def get_line(self, n: int) -> str:
+        """Get the nth line (1-based index)."""
+        ls = self.lines
+        if 1 <= n <= len(ls):
+            return ls[n - 1]
+        raise IndexError(f'Line {n} out of range (1-{len(ls)})')
+
+    def set_line(self, n: int, text: str):
+        """Set the nth line (1-based index) and save."""
+        ls = self.lines
+        if 1 <= n <= len(ls):
+            ls[n - 1] = text
+            self.lines = ls
+            self.save()
+        else:
+            raise IndexError(f'Line {n} out of range (1-{len(ls)})')
+
+    def insert_line(self, n: int, text: str):
+        """Insert a line before line n (1-based). Appends if n > line_count."""
+        ls = self.lines
+        n = max(1, min(n, len(ls) + 1))
+        ls.insert(n - 1, text)
+        self.lines = ls
+        self.save()
+
+    def delete_line(self, n: int):
+        """Delete the nth line (1-based index) and save."""
+        ls = self.lines
+        if 1 <= n <= len(ls):
+            ls.pop(n - 1)
+            self.lines = ls
+            self.save()
+        else:
+            raise IndexError(f'Line {n} out of range (1-{len(ls)})')
+
+    def get_lines(self, start: int, end: int) -> List[str]:
+        """Get lines from start to end (1-based, inclusive)."""
+        ls = self.lines
+        start = max(1, start)
+        end = min(len(ls), end)
+        return ls[start - 1:end]
+
+    def replace_lines(self, start: int, end: int, new_lines: List[str]):
+        """Replace lines from start to end (1-based, inclusive) and save."""
+        ls = self.lines
+        start = max(1, start)
+        end = min(len(ls), end)
+        ls[start - 1:end] = new_lines
+        self.lines = ls
+        self.save()
+
+    def append(self, text: str):
+        """Append text (can be multi-line) to the end and save."""
+        ls = self.lines
+        ls.extend(text.split('\n'))
+        self.lines = ls
+        self.save()
+
+    def find_lines(self, query: str) -> List[tuple]:
+        """Find lines containing query. Returns [(line_number, line_text), ...]."""
+        q = query.lower()
+        return [(i + 1, line) for i, line in enumerate(self.lines) if q in line.lower()]
+
     def save(self):
         """Save this memo back to ~/.flake/data.json."""
         flake = Flake()
