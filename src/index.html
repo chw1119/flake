@@ -80,6 +80,13 @@
               <polyline points="21 15 16 10 5 21"></polyline>
             </svg>
           </button>
+          <button class="toolbar-btn" id="btn-add-codeblock" title="코드 블록 추가 (Ctrl+Shift+K)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
+            </svg>
+          </button>
+          <div class="toolbar-divider"></div>
           <select id="font-family-select" class="toolbar-select" title="서체">
             <option value="Segoe UI, sans-serif">Segoe UI</option>
             <option value="Arial, sans-serif">Arial</option>
@@ -104,6 +111,23 @@
             <option value="48">48px</option>
             <option value="64">64px</option>
           </select>
+        </div>
+      </div>
+
+      <!-- Find & Replace Bar -->
+      <div class="find-bar" id="find-bar" style="display:none">
+        <div class="find-row">
+          <input type="text" id="find-input" placeholder="찾기..." />
+          <span class="find-count" id="find-count">0/0</span>
+          <button class="find-btn" id="btn-find-prev" title="이전 (Shift+Enter)">▲</button>
+          <button class="find-btn" id="btn-find-next" title="다음 (Enter)">▼</button>
+          <button class="find-btn" id="btn-find-toggle-replace" title="바꾸기 열기">⇄</button>
+          <button class="find-btn" id="btn-find-close" title="닫기 (Esc)">✕</button>
+        </div>
+        <div class="replace-row" id="replace-row" style="display:none">
+          <input type="text" id="replace-input" placeholder="바꾸기..." />
+          <button class="find-btn" id="btn-replace-one" title="바꾸기">바꾸기</button>
+          <button class="find-btn" id="btn-replace-all" title="모두 바꾸기">모두</button>
         </div>
       </div>
 

@@ -1,0 +1,7 @@
+setup.py
+flake_sdk/__init__.py
+flake_sdk/flake.py
+flake_sdk.egg-info/PKG-INFO
+flake_sdk.egg-info/SOURCES.txt
+flake_sdk.egg-info/dependency_links.txt
+flake_sdk.egg-info/top_level.txt

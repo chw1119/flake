@@ -449,6 +449,84 @@ body {
   border-color: var(--accent);
 }
 
+/* ===== Find & Replace Bar ===== */
+.find-bar {
+  padding: 8px 24px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  animation: slideDown 0.2s ease-out;
+  flex-shrink: 0;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.find-row, .replace-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.replace-row {
+  margin-top: 6px;
+}
+
+.find-bar input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: var(--transition);
+}
+
+.find-bar input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.find-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 36px;
+  text-align: center;
+}
+
+.find-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.find-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.find-highlight {
+  background: rgba(255, 215, 0, 0.35);
+  border-radius: 2px;
+}
+
+.find-highlight-active {
+  background: rgba(255, 165, 0, 0.7);
+  border-radius: 2px;
+  outline: 2px solid var(--warning);
+}
+
 /* ===== Editor Content ===== */
 .editor-content {
   flex: 1;
@@ -617,6 +695,144 @@ body {
 
 .empty-state p {
   font-size: 14px;
+}
+
+/* ===== Code Block (Jupyter-style) ===== */
+.code-block {
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: #0d1117;
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #161b22;
+  border-bottom: 1px solid var(--border);
+}
+
+.code-block-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'Courier New', monospace;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-block-label .cell-number {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.code-block-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.code-block-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  font-size: 14px;
+}
+
+.code-block-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.code-block-btn.play {
+  color: var(--success);
+}
+
+.code-block-btn.play:hover {
+  background: rgba(46, 213, 115, 0.15);
+  color: var(--success);
+}
+
+.code-block-btn.play.running {
+  color: var(--warning);
+  animation: pulse 1s infinite;
+}
+
+.code-block-btn.delete:hover {
+  color: var(--danger);
+  background: rgba(255, 71, 87, 0.15);
+}
+
+.code-block-editor {
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 16px;
+  background: #0d1117;
+  color: #e6edf3;
+  border: none;
+  font-family: 'Courier New', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  tab-size: 4;
+}
+
+.code-block-editor:focus {
+  background: #0d1117;
+}
+
+.code-block-output {
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+  background: #0a0e14;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.code-block-output:empty {
+  display: none;
+}
+
+.code-block-output .stdout {
+  color: #e6edf3;
+}
+
+.code-block-output .stderr {
+  color: var(--danger);
+}
+
+.code-block-output .exit-info {
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.code-block-output .exit-info.success {
+  color: var(--success);
+}
+
+.code-block-output .exit-info.error {
+  color: var(--danger);
 }
 
 /* ===== AI Toggle Button ===== */

@@ -218,6 +218,54 @@ ipcMain.handle('claude-stop', async () => {
   return { success: false };
 });
 
+// Python script execution
+const runningScripts = new Map();
+
+ipcMain.handle('run-script', async (event, { code, blockId }) => {
+  return new Promise((resolve) => {
+    const proc = spawn('python3', ['-u', '-c', code], {
+      env: { ...process.env, PYTHONUNBUFFERED: '1' },
+      timeout: 30000,
+    });
+
+    runningScripts.set(blockId, proc);
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => {
+      const chunk = data.toString();
+      stdout += chunk;
+      mainWindow.webContents.send('script-output', { blockId, chunk, stream: 'stdout' });
+    });
+
+    proc.stderr.on('data', (data) => {
+      const chunk = data.toString();
+      stderr += chunk;
+      mainWindow.webContents.send('script-output', { blockId, chunk, stream: 'stderr' });
+    });
+
+    proc.on('close', (code) => {
+      runningScripts.delete(blockId);
+      resolve({ success: code === 0, stdout, stderr, exitCode: code });
+    });
+
+    proc.on('error', (err) => {
+      runningScripts.delete(blockId);
+      resolve({ success: false, stderr: err.message, exitCode: -1 });
+    });
+  });
+});
+
+ipcMain.handle('stop-script', async (event, blockId) => {
+  const proc = runningScripts.get(blockId);
+  if (proc) {
+    proc.kill();
+    runningScripts.delete(blockId);
+    return { success: true };
+  }
+  return { success: false };
+});
+
 // Window controls
 ipcMain.on('window-minimize', () => mainWindow && mainWindow.minimize());
 ipcMain.on('window-maximize', () => {

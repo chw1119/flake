@@ -16,6 +16,11 @@ contextBridge.exposeInMainWorld('api', {
   claudeStop: () => ipcRenderer.invoke('claude-stop'),
   onClaudeStream: (callback) => ipcRenderer.on('claude-stream', (_, chunk) => callback(chunk)),
 
+  // Script execution
+  runScript: (code, blockId) => ipcRenderer.invoke('run-script', { code, blockId }),
+  stopScript: (blockId) => ipcRenderer.invoke('stop-script', blockId),
+  onScriptOutput: (callback) => ipcRenderer.on('script-output', (_, data) => callback(data)),
+
   // Events from main process
   onNewMemo: (callback) => ipcRenderer.on('new-memo', callback),
 });

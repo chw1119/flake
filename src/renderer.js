@@ -53,6 +53,7 @@ function selectMemo(id) {
     titleInput.value = memo.title;
     editor.innerHTML = memo.content;
     wrapExistingImages();
+    reattachCodeBlocks();
     updateStatus();
     updateCharCount();
   }
@@ -269,6 +270,10 @@ document.getElementById('font-family-select').addEventListener('change', (e) => 
   editor.focus();
 });
 
+document.getElementById('btn-add-codeblock').addEventListener('click', () => {
+  insertCodeBlock();
+});
+
 document.getElementById('btn-add-image').addEventListener('click', () => {
   const input = document.createElement('input');
   input.type = 'file';
@@ -317,6 +322,18 @@ document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key === 'n') {
     e.preventDefault();
     createNewMemo();
+  }
+  if (e.ctrlKey && e.shiftKey && e.key === 'K') {
+    e.preventDefault();
+    insertCodeBlock();
+  }
+  if (e.ctrlKey && e.key === 'f') {
+    e.preventDefault();
+    openFindBar();
+  }
+  if (e.ctrlKey && e.key === 'h') {
+    e.preventDefault();
+    openFindBar(true);
   }
   // Delete image with Delete/Backspace when selected
   if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -604,3 +621,384 @@ document.addEventListener('keydown', (e) => {
     toggleAiPanel();
   }
 });
+
+// ===== Find & Replace =====
+const findBar = document.getElementById('find-bar');
+const findInput = document.getElementById('find-input');
+const findCountEl = document.getElementById('find-count');
+const replaceRow = document.getElementById('replace-row');
+const replaceInput = document.getElementById('replace-input');
+
+let findMatches = [];
+let findCurrentIdx = -1;
+let originalEditorContent = '';
+
+function openFindBar(withReplace = false) {
+  findBar.style.display = 'block';
+  replaceRow.style.display = withReplace ? 'flex' : 'none';
+  findInput.focus();
+  findInput.select();
+}
+
+function closeFindBar() {
+  findBar.style.display = 'none';
+  clearHighlights();
+  findMatches = [];
+  findCurrentIdx = -1;
+  findCountEl.textContent = '0/0';
+}
+
+function clearHighlights() {
+  const marks = editor.querySelectorAll('mark.find-highlight, mark.find-highlight-active');
+  marks.forEach(mark => {
+    const parent = mark.parentNode;
+    parent.replaceChild(document.createTextNode(mark.textContent), mark);
+    parent.normalize();
+  });
+}
+
+function performFind() {
+  clearHighlights();
+  findMatches = [];
+  findCurrentIdx = -1;
+
+  const query = findInput.value;
+  if (!query) {
+    findCountEl.textContent = '0/0';
+    return;
+  }
+
+  // Walk text nodes and highlight matches
+  const treeWalker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  while (treeWalker.nextNode()) {
+    textNodes.push(treeWalker.currentNode);
+  }
+
+  const queryLower = query.toLowerCase();
+
+  textNodes.forEach(node => {
+    const text = node.textContent;
+    const textLower = text.toLowerCase();
+    let idx = 0;
+    const fragments = [];
+    let lastEnd = 0;
+
+    while ((idx = textLower.indexOf(queryLower, idx)) !== -1) {
+      if (idx > lastEnd) {
+        fragments.push({ type: 'text', content: text.substring(lastEnd, idx) });
+      }
+      fragments.push({ type: 'match', content: text.substring(idx, idx + query.length) });
+      lastEnd = idx + query.length;
+      idx = lastEnd;
+    }
+
+    if (fragments.length > 0) {
+      if (lastEnd < text.length) {
+        fragments.push({ type: 'text', content: text.substring(lastEnd) });
+      }
+      const span = document.createDocumentFragment();
+      fragments.forEach(f => {
+        if (f.type === 'match') {
+          const mark = document.createElement('mark');
+          mark.className = 'find-highlight';
+          mark.textContent = f.content;
+          span.appendChild(mark);
+          findMatches.push(mark);
+        } else {
+          span.appendChild(document.createTextNode(f.content));
+        }
+      });
+      node.parentNode.replaceChild(span, node);
+    }
+  });
+
+  if (findMatches.length > 0) {
+    findCurrentIdx = 0;
+    setActiveMatch(0);
+  }
+  updateFindCount();
+}
+
+function setActiveMatch(idx) {
+  findMatches.forEach(m => m.className = 'find-highlight');
+  if (findMatches[idx]) {
+    findMatches[idx].className = 'find-highlight-active';
+    findMatches[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+function findNext() {
+  if (findMatches.length === 0) return;
+  findCurrentIdx = (findCurrentIdx + 1) % findMatches.length;
+  setActiveMatch(findCurrentIdx);
+  updateFindCount();
+}
+
+function findPrev() {
+  if (findMatches.length === 0) return;
+  findCurrentIdx = (findCurrentIdx - 1 + findMatches.length) % findMatches.length;
+  setActiveMatch(findCurrentIdx);
+  updateFindCount();
+}
+
+function updateFindCount() {
+  findCountEl.textContent = findMatches.length > 0
+    ? `${findCurrentIdx + 1}/${findMatches.length}`
+    : '0/0';
+}
+
+function replaceOne() {
+  if (findCurrentIdx < 0 || !findMatches[findCurrentIdx]) return;
+  const mark = findMatches[findCurrentIdx];
+  const text = document.createTextNode(replaceInput.value);
+  mark.parentNode.replaceChild(text, mark);
+  findMatches.splice(findCurrentIdx, 1);
+  if (findCurrentIdx >= findMatches.length) findCurrentIdx = 0;
+  if (findMatches.length > 0) {
+    setActiveMatch(findCurrentIdx);
+  }
+  updateFindCount();
+  saveCurrentMemo();
+}
+
+function replaceAll() {
+  if (findMatches.length === 0) return;
+  const replacement = replaceInput.value;
+  findMatches.forEach(mark => {
+    mark.parentNode.replaceChild(document.createTextNode(replacement), mark);
+  });
+  findMatches = [];
+  findCurrentIdx = -1;
+  updateFindCount();
+  saveCurrentMemo();
+  showToast('모두 바꾸기 완료', 'success');
+}
+
+findInput.addEventListener('input', performFind);
+
+findInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    e.shiftKey ? findPrev() : findNext();
+  }
+  if (e.key === 'Escape') closeFindBar();
+});
+
+replaceInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeFindBar();
+});
+
+document.getElementById('btn-find-next').addEventListener('click', findNext);
+document.getElementById('btn-find-prev').addEventListener('click', findPrev);
+document.getElementById('btn-find-close').addEventListener('click', closeFindBar);
+document.getElementById('btn-find-toggle-replace').addEventListener('click', () => {
+  replaceRow.style.display = replaceRow.style.display === 'none' ? 'flex' : 'none';
+});
+document.getElementById('btn-replace-one').addEventListener('click', replaceOne);
+document.getElementById('btn-replace-all').addEventListener('click', replaceAll);
+
+// ===== Code Blocks (Jupyter-style) =====
+let codeBlockCounter = 0;
+
+function insertCodeBlock(initialCode = '') {
+  codeBlockCounter++;
+  const blockId = 'cb-' + Date.now() + '-' + codeBlockCounter;
+
+  const block = document.createElement('div');
+  block.className = 'code-block';
+  block.contentEditable = 'false';
+  block.dataset.blockId = blockId;
+
+  block.innerHTML = `
+    <div class="code-block-header">
+      <span class="code-block-label">
+        <span class="cell-number">[${codeBlockCounter}]</span> Python
+      </span>
+      <div class="code-block-actions">
+        <button class="code-block-btn play" title="실행 (Ctrl+Enter)">▶</button>
+        <button class="code-block-btn stop" title="중단" style="display:none">■</button>
+        <button class="code-block-btn delete" title="삭제">✕</button>
+      </div>
+    </div>
+    <textarea class="code-block-editor" spellcheck="false" placeholder="# Python 코드를 입력하세요...">${initialCode}</textarea>
+    <div class="code-block-output"></div>
+  `;
+
+  const textarea = block.querySelector('.code-block-editor');
+  const playBtn = block.querySelector('.play');
+  const stopBtn = block.querySelector('.stop');
+  const deleteBtn = block.querySelector('.delete');
+  const output = block.querySelector('.code-block-output');
+
+  // Auto-resize textarea
+  textarea.addEventListener('input', () => {
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+    saveCurrentMemo();
+  });
+
+  // Tab key support
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
+      textarea.selectionStart = textarea.selectionEnd = start + 4;
+    }
+    // Ctrl+Enter to run
+    if (e.ctrlKey && e.key === 'Enter') {
+      e.preventDefault();
+      runCodeBlock(blockId, textarea.value, output, playBtn, stopBtn);
+    }
+  });
+
+  // Play button
+  playBtn.addEventListener('click', () => {
+    runCodeBlock(blockId, textarea.value, output, playBtn, stopBtn);
+  });
+
+  // Stop button
+  stopBtn.addEventListener('click', async () => {
+    await window.api.stopScript(blockId);
+    playBtn.style.display = 'flex';
+    stopBtn.style.display = 'none';
+    playBtn.classList.remove('running');
+  });
+
+  // Delete button
+  deleteBtn.addEventListener('click', () => {
+    block.remove();
+    saveCurrentMemo();
+    showToast('코드 블록이 삭제되었습니다', 'warning');
+  });
+
+  // Insert at cursor or end of editor
+  const selection = window.getSelection();
+  if (selection.rangeCount > 0 && editor.contains(selection.anchorNode)) {
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(block);
+    // Add a line break after for editing
+    const br = document.createElement('br');
+    block.after(br);
+    range.setStartAfter(br);
+    range.collapse(true);
+  } else {
+    editor.appendChild(block);
+    editor.appendChild(document.createElement('br'));
+  }
+
+  // Auto-resize initial
+  setTimeout(() => {
+    textarea.style.height = textarea.scrollHeight + 'px';
+    textarea.focus();
+  }, 50);
+
+  saveCurrentMemo();
+}
+
+async function runCodeBlock(blockId, code, outputEl, playBtn, stopBtn) {
+  if (!code.trim()) return;
+
+  outputEl.innerHTML = '';
+  outputEl.style.display = 'block';
+  playBtn.style.display = 'none';
+  stopBtn.style.display = 'flex';
+  playBtn.classList.add('running');
+
+  // Prepend flake_sdk import hint
+  const wrappedCode = `import sys; sys.path.insert(0, '${__dirname}/../sdk')\n${code}`;
+
+  const result = await window.api.runScript(wrappedCode, blockId);
+
+  playBtn.style.display = 'flex';
+  stopBtn.style.display = 'none';
+  playBtn.classList.remove('running');
+
+  // Show exit status
+  const exitEl = document.createElement('div');
+  if (result.exitCode === 0) {
+    exitEl.className = 'exit-info success';
+    exitEl.textContent = '✓ 실행 완료';
+  } else if (result.exitCode === null) {
+    exitEl.className = 'exit-info';
+    exitEl.textContent = '■ 중단됨';
+  } else {
+    exitEl.className = 'exit-info error';
+    exitEl.textContent = `✗ 종료 코드: ${result.exitCode}`;
+  }
+  outputEl.appendChild(exitEl);
+}
+
+// Listen for script output streaming
+window.api.onScriptOutput(({ blockId, chunk, stream }) => {
+  const block = document.querySelector(`.code-block[data-block-id="${blockId}"]`);
+  if (!block) return;
+  const output = block.querySelector('.code-block-output');
+  output.style.display = 'block';
+  const span = document.createElement('span');
+  span.className = stream;
+  span.textContent = chunk;
+  output.appendChild(span);
+  output.scrollTop = output.scrollHeight;
+});
+
+// Re-attach code block event listeners when loading a memo
+function reattachCodeBlocks() {
+  const blocks = editor.querySelectorAll('.code-block');
+  blocks.forEach(block => {
+    block.contentEditable = 'false';
+    const blockId = block.dataset.blockId || 'cb-' + Date.now() + '-' + (++codeBlockCounter);
+    block.dataset.blockId = blockId;
+
+    const textarea = block.querySelector('.code-block-editor');
+    const playBtn = block.querySelector('.play');
+    const stopBtn = block.querySelector('.stop');
+    const deleteBtn = block.querySelector('.delete');
+    const output = block.querySelector('.code-block-output');
+
+    if (!textarea || !playBtn) return;
+
+    textarea.addEventListener('input', () => {
+      textarea.style.height = 'auto';
+      textarea.style.height = textarea.scrollHeight + 'px';
+      saveCurrentMemo();
+    });
+
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
+        textarea.selectionStart = textarea.selectionEnd = start + 4;
+      }
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        runCodeBlock(blockId, textarea.value, output, playBtn, stopBtn);
+      }
+    });
+
+    playBtn.addEventListener('click', () => {
+      runCodeBlock(blockId, textarea.value, output, playBtn, stopBtn);
+    });
+
+    stopBtn.addEventListener('click', async () => {
+      await window.api.stopScript(blockId);
+      playBtn.style.display = 'flex';
+      stopBtn.style.display = 'none';
+      playBtn.classList.remove('running');
+    });
+
+    deleteBtn.addEventListener('click', () => {
+      block.remove();
+      saveCurrentMemo();
+    });
+
+    setTimeout(() => {
+      textarea.style.height = textarea.scrollHeight + 'px';
+    }, 50);
+  });
+}
