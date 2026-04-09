@@ -65,6 +65,10 @@ function saveCurrentMemo() {
   const memo = memos.find(m => m.id === currentMemoId);
   if (memo) {
     memo.title = titleInput.value;
+    // Sync textarea values into DOM before saving
+    editor.querySelectorAll('.code-block-editor').forEach(ta => {
+      ta.textContent = ta.value;
+    });
     memo.content = editor.innerHTML;
     memo.updatedAt = new Date().toISOString();
     // Extract image data
