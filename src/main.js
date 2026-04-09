@@ -76,10 +76,34 @@ function registerShortcuts() {
   });
 }
 
+// Watch ~/.flake/data.json for external changes (e.g. Python SDK)
+let fileWatcher = null;
+let lastWriteTime = 0;
+
+function watchDataFile() {
+  if (fileWatcher) return;
+  // Ensure file exists before watching
+  if (!fs.existsSync(DATA_FILE)) {
+    fs.writeFileSync(DATA_FILE, '[]', 'utf-8');
+  }
+  fileWatcher = fs.watch(DATA_FILE, { persistent: false }, (eventType) => {
+    if (eventType === 'change') {
+      // Ignore changes we made ourselves (within 500ms)
+      const now = Date.now();
+      if (now - lastWriteTime < 500) return;
+      // Notify renderer to reload
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('data-file-changed');
+      }
+    }
+  });
+}
+
 app.whenReady().then(() => {
   createWindow();
   createTray();
   registerShortcuts();
+  watchDataFile();
 });
 
 app.on('will-quit', () => {
@@ -102,6 +126,7 @@ app.on('activate', () => {
 
 ipcMain.handle('save-memos', async (event, memos) => {
   try {
+    lastWriteTime = Date.now();
     fs.writeFileSync(DATA_FILE, JSON.stringify(memos, null, 2), 'utf-8');
     return { success: true };
   } catch (err) {

@@ -326,6 +326,16 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     createNewMemo();
   }
+  if (e.ctrlKey && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+    e.preventDefault();
+    document.execCommand('redo');
+    return;
+  }
+  if (e.ctrlKey && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+    e.preventDefault();
+    document.execCommand('undo');
+    return;
+  }
   if (e.ctrlKey && e.shiftKey && e.key === 'K') {
     e.preventDefault();
     insertCodeBlock();
@@ -355,6 +365,21 @@ document.addEventListener('keydown', (e) => {
 // IPC from main process
 window.api.onNewMemo(() => {
   createNewMemo();
+});
+
+// Reload when data.json is changed externally (e.g. by Python SDK)
+window.api.onDataFileChanged(async () => {
+  const prevId = currentMemoId;
+  await loadFromDisk();
+  // Try to stay on the same memo
+  const still = memos.find(m => m.id === prevId);
+  if (still) {
+    selectMemo(still.id);
+  } else if (memos.length > 0) {
+    selectMemo(memos[0].id);
+  }
+  renderMemoList();
+  showToast('외부에서 메모가 변경되어 새로고침했습니다', 'info');
 });
 
 // ===== Disk Storage (~/.flake/data.json) =====

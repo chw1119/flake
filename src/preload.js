@@ -23,4 +23,5 @@ contextBridge.exposeInMainWorld('api', {
 
   // Events from main process
   onNewMemo: (callback) => ipcRenderer.on('new-memo', callback),
+  onDataFileChanged: (callback) => ipcRenderer.on('data-file-changed', callback),
 });
