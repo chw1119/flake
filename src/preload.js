@@ -10,6 +10,12 @@ contextBridge.exposeInMainWorld('api', {
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
 
+  // Claude Code integration
+  claudeCheck: () => ipcRenderer.invoke('claude-check'),
+  claudeSend: (message, memoContext) => ipcRenderer.invoke('claude-send', { message, memoContext }),
+  claudeStop: () => ipcRenderer.invoke('claude-stop'),
+  onClaudeStream: (callback) => ipcRenderer.on('claude-stream', (_, chunk) => callback(chunk)),
+
   // Events from main process
   onNewMemo: (callback) => ipcRenderer.on('new-memo', callback),
 });

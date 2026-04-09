@@ -307,8 +307,6 @@ searchInput.addEventListener('input', (e) => {
 
 document.getElementById('btn-new-memo').addEventListener('click', createNewMemo);
 
-// File operations - auto save on changes (debounced)
-
 // Window controls
 document.getElementById('btn-minimize').addEventListener('click', () => window.api.minimize());
 document.getElementById('btn-maximize').addEventListener('click', () => window.api.maximize());
@@ -414,3 +412,195 @@ function showToast(message, type = 'info') {
     setTimeout(() => toast.remove(), 300);
   }, 2500);
 }
+
+// ===== Claude AI Integration =====
+const aiPanel = document.getElementById('ai-panel');
+const aiMessages = document.getElementById('ai-messages');
+const aiInput = document.getElementById('ai-input');
+const aiSendBtn = document.getElementById('btn-ai-send');
+const aiApplyBtn = document.getElementById('btn-ai-apply');
+const aiReplaceBtn = document.getElementById('btn-ai-replace');
+const aiStopBtn = document.getElementById('btn-ai-stop');
+const aiStatusBadge = document.getElementById('ai-status-badge');
+const aiToggleBtn = document.getElementById('btn-toggle-ai');
+
+let aiIsGenerating = false;
+let lastAiResponse = '';
+let chatHistory = [];
+
+// Toggle AI panel
+aiToggleBtn.addEventListener('click', () => toggleAiPanel());
+document.getElementById('btn-close-ai').addEventListener('click', () => toggleAiPanel(false));
+
+function toggleAiPanel(forceState) {
+  const isOpen = forceState !== undefined ? forceState : !aiPanel.classList.contains('open');
+  aiPanel.classList.toggle('open', isOpen);
+  aiToggleBtn.classList.toggle('active', isOpen);
+  if (isOpen) {
+    checkClaudeStatus();
+    aiInput.focus();
+  }
+}
+
+// Check if Claude CLI is available
+async function checkClaudeStatus() {
+  const result = await window.api.claudeCheck();
+  if (result.available) {
+    aiStatusBadge.textContent = 'Online';
+    aiStatusBadge.className = 'ai-status-badge online';
+  } else {
+    aiStatusBadge.textContent = 'Offline';
+    aiStatusBadge.className = 'ai-status-badge offline';
+  }
+}
+
+// Get current memo context (title + plain text content)
+function getMemoContext() {
+  const memo = memos.find(m => m.id === currentMemoId);
+  return {
+    title: memo ? memo.title : '',
+    content: memo ? stripHtml(memo.content) : ''
+  };
+}
+
+// Build prompt with chat history + current memo
+function buildPrompt(userMessage) {
+  let historyText = '';
+  // Include last few exchanges for context
+  const recent = chatHistory.slice(-6);
+  if (recent.length > 0) {
+    historyText = '\n\nPrevious conversation:\n' + recent.map(m =>
+      `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
+    ).join('\n');
+  }
+  return userMessage + historyText;
+}
+
+// Send message to Claude
+async function sendToAi() {
+  const message = aiInput.value.trim();
+  if (!message || aiIsGenerating) return;
+
+  // Add user message to UI
+  addAiMessage(message, 'user');
+  chatHistory.push({ role: 'user', content: message });
+  aiInput.value = '';
+  aiInput.style.height = 'auto';
+
+  // Show typing indicator
+  aiIsGenerating = true;
+  aiSendBtn.disabled = true;
+  aiStopBtn.style.display = 'block';
+  aiApplyBtn.disabled = true;
+  aiReplaceBtn.disabled = true;
+
+  // Create streaming message bubble
+  const msgEl = addAiMessage('', 'assistant');
+  msgEl.classList.add('streaming');
+
+  // Add typing dots
+  const typingEl = document.createElement('div');
+  typingEl.className = 'ai-typing';
+  typingEl.innerHTML = '<span></span><span></span><span></span>';
+  msgEl.appendChild(typingEl);
+  scrollAiToBottom();
+
+  lastAiResponse = '';
+
+  // Listen for streaming chunks
+  const streamHandler = (chunk) => {
+    if (typingEl.parentNode) typingEl.remove();
+    lastAiResponse += chunk;
+    msgEl.textContent = lastAiResponse;
+    scrollAiToBottom();
+  };
+  window.api.onClaudeStream(streamHandler);
+
+  // Get current memo content and send with message
+  const memoContext = getMemoContext();
+  const fullMessage = buildPrompt(message);
+  const result = await window.api.claudeSend(fullMessage, memoContext);
+
+  // Clean up
+  msgEl.classList.remove('streaming');
+  if (typingEl.parentNode) typingEl.remove();
+  aiIsGenerating = false;
+  aiSendBtn.disabled = false;
+  aiStopBtn.style.display = 'none';
+
+  if (result.success) {
+    lastAiResponse = result.response;
+    msgEl.textContent = lastAiResponse;
+    chatHistory.push({ role: 'assistant', content: lastAiResponse });
+    aiApplyBtn.disabled = false;
+    aiReplaceBtn.disabled = false;
+  } else {
+    msgEl.className = 'ai-message error';
+    msgEl.textContent = 'Error: ' + (result.error || 'Unknown error');
+  }
+
+  scrollAiToBottom();
+}
+
+function addAiMessage(text, role) {
+  const el = document.createElement('div');
+  el.className = `ai-message ${role}`;
+  if (text) el.textContent = text;
+  aiMessages.appendChild(el);
+  scrollAiToBottom();
+  return el;
+}
+
+function scrollAiToBottom() {
+  aiMessages.scrollTop = aiMessages.scrollHeight;
+}
+
+// Apply AI response to memo (append)
+aiApplyBtn.addEventListener('click', () => {
+  if (!lastAiResponse) return;
+  editor.innerHTML += '<br>' + lastAiResponse.replace(/\n/g, '<br>');
+  saveCurrentMemo();
+  showToast('AI 응답이 메모에 추가되었습니다', 'success');
+});
+
+// Replace memo content with AI response
+aiReplaceBtn.addEventListener('click', () => {
+  if (!lastAiResponse) return;
+  editor.innerHTML = lastAiResponse.replace(/\n/g, '<br>');
+  saveCurrentMemo();
+  showToast('메모 내용이 AI 응답으로 교체되었습니다', 'success');
+});
+
+// Stop generation
+aiStopBtn.addEventListener('click', async () => {
+  await window.api.claudeStop();
+  aiIsGenerating = false;
+  aiSendBtn.disabled = false;
+  aiStopBtn.style.display = 'none';
+  showToast('AI 생성이 중단되었습니다', 'warning');
+});
+
+// Send on Enter (Shift+Enter for newline)
+aiInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendToAi();
+  }
+});
+
+// Auto-resize textarea
+aiInput.addEventListener('input', () => {
+  aiInput.style.height = 'auto';
+  aiInput.style.height = Math.min(aiInput.scrollHeight, 120) + 'px';
+});
+
+// Send button click
+aiSendBtn.addEventListener('click', sendToAi);
+
+// Keyboard shortcut to toggle AI panel
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.shiftKey && e.key === 'A') {
+    e.preventDefault();
+    toggleAiPanel();
+  }
+});

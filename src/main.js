@@ -2,6 +2,7 @@ const { app, BrowserWindow, globalShortcut, ipcMain, dialog, Tray, Menu, nativeI
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { spawn } = require('child_process');
 
 const FLAKE_DIR = path.join(os.homedir(), '.flake');
 const DATA_FILE = path.join(FLAKE_DIR, 'data.json');
@@ -141,6 +142,80 @@ ipcMain.handle('export-memo', async (event, { memo, format }) => {
   } catch (err) {
     return { success: false, error: err.message };
   }
+});
+
+// Claude Code integration
+let claudeProcess = null;
+
+ipcMain.handle('claude-check', async () => {
+  return new Promise((resolve) => {
+    const proc = spawn('claude', ['--version'], { shell: true });
+    let output = '';
+    proc.stdout.on('data', (d) => output += d.toString());
+    proc.on('close', (code) => {
+      resolve({ available: code === 0, version: output.trim() });
+    });
+    proc.on('error', () => resolve({ available: false }));
+  });
+});
+
+ipcMain.handle('claude-send', async (event, { message, memoContext }) => {
+  return new Promise((resolve) => {
+    const systemPrompt = `You are an AI assistant embedded in a note-taking app called Flake. The user is working on a memo. Help them with their request about the memo content. Always respond in the same language the user uses. If the user asks you to write/edit/generate content, output ONLY the content itself without explanations.
+
+Current memo title: ${memoContext.title || '(untitled)'}
+Current memo content:
+${memoContext.content || '(empty)'}`;
+
+    const fullPrompt = `${systemPrompt}\n\nUser request: ${message}`;
+
+    const proc = spawn('claude', ['-p', '--output-format', 'text'], {
+      shell: true,
+      env: { ...process.env },
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdin.write(fullPrompt);
+    proc.stdin.end();
+
+    proc.stdout.on('data', (data) => {
+      const chunk = data.toString();
+      stdout += chunk;
+      // Stream chunks to renderer
+      mainWindow.webContents.send('claude-stream', chunk);
+    });
+
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    proc.on('close', (code) => {
+      claudeProcess = null;
+      if (code === 0) {
+        resolve({ success: true, response: stdout.trim() });
+      } else {
+        resolve({ success: false, error: stderr || 'Claude process exited with code ' + code });
+      }
+    });
+
+    proc.on('error', (err) => {
+      claudeProcess = null;
+      resolve({ success: false, error: 'Claude CLI not found. Install it first.' });
+    });
+
+    claudeProcess = proc;
+  });
+});
+
+ipcMain.handle('claude-stop', async () => {
+  if (claudeProcess) {
+    claudeProcess.kill();
+    claudeProcess = null;
+    return { success: true };
+  }
+  return { success: false };
 });
 
 // Window controls
