@@ -507,11 +507,19 @@ async function sendToAi() {
 
   lastAiResponse = '';
 
-  // Listen for streaming chunks
+  // Snapshot current content — AI will append after it
+  const contentBefore = editor.innerHTML;
+  lastContentBefore = contentBefore;
+
+  // Listen for streaming chunks — write to memo in real time
   const streamHandler = (chunk) => {
     if (typingEl.parentNode) typingEl.remove();
     lastAiResponse += chunk;
     msgEl.textContent = lastAiResponse;
+    // Live-write into memo editor
+    editor.innerHTML = contentBefore
+      + (contentBefore ? '<br><br>' : '')
+      + lastAiResponse.replace(/\n/g, '<br>');
     scrollAiToBottom();
   };
   window.api.onClaudeStream(streamHandler);
@@ -532,11 +540,20 @@ async function sendToAi() {
     lastAiResponse = result.response;
     msgEl.textContent = lastAiResponse;
     chatHistory.push({ role: 'assistant', content: lastAiResponse });
+    // Final write to memo
+    editor.innerHTML = contentBefore
+      + (contentBefore ? '<br><br>' : '')
+      + lastAiResponse.replace(/\n/g, '<br>');
+    saveCurrentMemo();
+    updateCharCount();
     aiApplyBtn.disabled = false;
     aiReplaceBtn.disabled = false;
+    showToast('AI가 메모에 작성했습니다', 'success');
   } else {
     msgEl.className = 'ai-message error';
     msgEl.textContent = 'Error: ' + (result.error || 'Unknown error');
+    // Revert memo on error
+    editor.innerHTML = contentBefore;
   }
 
   scrollAiToBottom();
@@ -555,20 +572,23 @@ function scrollAiToBottom() {
   aiMessages.scrollTop = aiMessages.scrollHeight;
 }
 
-// Apply AI response to memo (append)
-aiApplyBtn.addEventListener('click', () => {
-  if (!lastAiResponse) return;
-  editor.innerHTML += '<br>' + lastAiResponse.replace(/\n/g, '<br>');
-  saveCurrentMemo();
-  showToast('AI 응답이 메모에 추가되었습니다', 'success');
-});
+let lastContentBefore = '';
 
-// Replace memo content with AI response
-aiReplaceBtn.addEventListener('click', () => {
+// Keep only AI response (remove original content)
+aiApplyBtn.addEventListener('click', () => {
   if (!lastAiResponse) return;
   editor.innerHTML = lastAiResponse.replace(/\n/g, '<br>');
   saveCurrentMemo();
-  showToast('메모 내용이 AI 응답으로 교체되었습니다', 'success');
+  showToast('AI 응답만 남겼습니다', 'success');
+});
+
+// Undo AI write — restore content before AI wrote
+aiReplaceBtn.addEventListener('click', () => {
+  if (lastContentBefore === undefined) return;
+  editor.innerHTML = lastContentBefore;
+  saveCurrentMemo();
+  updateCharCount();
+  showToast('AI 작성을 되돌렸습니다', 'warning');
 });
 
 // Stop generation
