@@ -223,8 +223,12 @@ const runningScripts = new Map();
 
 ipcMain.handle('run-script', async (event, { code, blockId }) => {
   return new Promise((resolve) => {
+    const sdkPath = path.join(__dirname, '..', 'sdk');
+    const existingPythonPath = process.env.PYTHONPATH || '';
+    const pythonPath = existingPythonPath ? `${sdkPath}:${existingPythonPath}` : sdkPath;
+
     const proc = spawn('python3', ['-u', '-c', code], {
-      env: { ...process.env, PYTHONUNBUFFERED: '1' },
+      env: { ...process.env, PYTHONUNBUFFERED: '1', PYTHONPATH: pythonPath },
       timeout: 30000,
     });
 

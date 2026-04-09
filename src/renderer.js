@@ -908,8 +908,8 @@ async function runCodeBlock(blockId, code, outputEl, playBtn, stopBtn) {
   stopBtn.style.display = 'flex';
   playBtn.classList.add('running');
 
-  // Prepend flake_sdk import hint
-  const wrappedCode = `import sys; sys.path.insert(0, '${__dirname}/../sdk')\n${code}`;
+  // Just run the user's code directly
+  const wrappedCode = code;
 
   const result = await window.api.runScript(wrappedCode, blockId);
 
